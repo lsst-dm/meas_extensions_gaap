@@ -24,7 +24,7 @@ from __future__ import annotations
 
 __all__ = ("GaapFluxPlugin", "GaapFluxConfig", "ForcedGaapFluxPlugin", "ForcedGaapFluxConfig")
 
-from typing import Optional
+from typing import Optional, Generator
 import itertools
 import lsst.afw.image as afwImage
 import lsst.afw.detection as afwDetection
@@ -132,7 +132,8 @@ class BaseGaapFluxConfig(measBase.BaseMeasurementPluginConfig):
         Notes
         -----
         Being a class method, this does not check if measurements corresponding
-        to the input arguments are made.
+        to the input arguments are made. Users should use
+        `getAllGaapResultNames` to obtain the full list of base names.
 
         This is not a config-y thing, but is placed here to make the fieldnames
         from GAaP measurements available outside the plugin.
@@ -159,6 +160,33 @@ class BaseGaapFluxConfig(measBase.BaseMeasurementPluginConfig):
         if name is None:
             return suffix
         return "_".join((name, suffix))
+
+    def getAllGaapResultNames(self, name: Optional[str] = None) -> Generator[str]:
+        """Generate the base names for all of the GAaP fields.
+
+        For example, if the plugin is configured with `scalingFactors` = [1.15]
+        and `sigmas` = [4.0, 5.0] the returned expression would yield
+        ("ext_gaap_GaapFlux_1_15x_4_0", "ext_gaap_GaapFlux_1_15x_5_0") when
+        called with ``name`` = "ext_gaap_GaapFlux".
+
+        Parameters
+        ----------
+        name : `str`, optional
+            The exact registered name of the GAaP plugin, typically either
+            "ext_gaap_GaapFlux" or "undeblended_ext_gaap_GaapFlux". If ``name``
+            is None, then only the middle parts (("1_15x_4_0", "1_15x_5_0"),
+            for example) without the leading underscores are returned.
+
+        Returns
+        -------
+        baseNames : `generator`
+            A generator expression yielding all the base names.
+        """
+        scalingFactors = self.scalingFactors
+        sigmas = self.sigmas
+        baseNames = (self._getGaapResultName(sF, sigma, name)
+                     for sF, sigma in itertools.product(scalingFactors, sigmas))
+        return baseNames
 
 
 class BaseGaapFluxPlugin(measBase.GenericPlugin):

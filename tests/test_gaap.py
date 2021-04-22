@@ -167,11 +167,9 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
 
         # We will check the accuracy of the measured flux in DM-29430.
         # We simply check now if it produces a positive number (non-nan)
-        for sF in algConfig.scalingFactors:
-            for sigma in algConfig.sigmas:
-                baseName = algConfig._getGaapResultName(sF, sigma, algName)
-                self.assertTrue((source.get(baseName + "_instFlux") >= 0))
-                self.assertTrue((source.get(baseName + "_instFluxErr") >= 0))
+        for baseName in algConfig.getAllGaapResultNames(algName):
+            self.assertTrue((source.get(baseName + "_instFlux") >= 0))
+            self.assertTrue((source.get(baseName + "_instFluxErr") >= 0))
 
     def runGaap(self, forced, scalingFactors=(1.0, 1.1, 1.15, 1.2, 1.5, 2.0), psfSigmas=(1.7, 0.95, 1.3,)):
         for psfSigma in psfSigmas:
