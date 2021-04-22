@@ -30,9 +30,11 @@ import lsst.afw.image as afwImage
 import lsst.afw.detection as afwDetection
 import lsst.afw.geom as afwGeom
 import lsst.meas.base as measBase
+from lsst.meas.base.fluxUtilities import FluxResultKey
 import lsst.pex.config as pexConfig
 from lsst.ip.diffim import ModelPsfMatchTask
 from lsst.pex.exceptions import RuntimeError as pexRuntimeError
+import scipy.signal
 
 PLUGIN_NAME = "ext_gaap_GaapFlux"
 
@@ -243,6 +245,37 @@ class BaseGaapFluxPlugin(measBase.GenericPlugin):
         # Docstring inherited.
         return cls.FLUX_ORDER
 
+    def _computeACF(self, kernel: lsst.afw.math.Kernel) -> lsst.afw.image.Image:
+        kernelImage = afwImage.ImageD(kernel.getDimensions())
+        kernel.computeImage(kernelImage, False)
+        acfArray = scipy.signal.correlate2d(kernelImage.array, kernelImage.array, boundary='fill')
+        acfImage = afwImage.ImageD(acfArray)
+        return acfImage
+
+    def _getFluxErrScaling(self, kernelACF: lsst.afw.image.Image,
+                           aperShape: lsst.afw.geom.Quadrupole) -> float:
+        """Returns the value by which the standard error has to be scaled due
+           to noise correlations.
+
+        Parameters
+        ----------
+        kernelACF : `lsst.afw.image.Image`
+            The auto-correlation function (ACF) of the PSF matching kernel.
+        aperShape : `lsst.afw.geom.Quadrupole`
+            The shape parameter of the Gaussian function which was used to
+            measure GAaP flux.
+
+        Returns
+        -------
+        fluxErrScaling : `float`
+            The factor by which the standard error on GAaP flux must be scaled.
+        """
+        aperShape2 = afwGeom.Quadrupole(2*aperShape.getParameterVector())
+        corrFlux = measBase.SdssShapeAlgorithm.computeFixedMomentsFlux(kernelACF, aperShape2,
+                                                                       kernelACF.getBBox().getCenter())
+        fluxErrScaling = (0.5*corrFlux.instFlux)**0.5
+        return fluxErrScaling
+
     def _convolve(self, exposure: afwImage.Exposure, modelPsf: afwDetection.GaussianPsf,
                   measRecord: lsst.afw.table.SourceRecord) -> tuple[lsst.pipe.base.Struct,  # noqa: F821
                                                                     lsst.geom.Box2I]:  # noqa: F821
@@ -302,6 +335,9 @@ class BaseGaapFluxPlugin(measBase.GenericPlugin):
         # TODO: DM-27407 will re-Gaussianize the exposure to make the PSF even
         # more Gaussian-like
 
+        # Do not rescale the variance plane
+        result.psfMatchedExposure.variance.array = subExposure.variance.array
+
         # k pixels around the edges will have NO_DATA mask bit set,
         # where 2k+1 is the kernelSize. Set k number of pixels to erode without
         # reusing pixToGrow, as pixToGrow can be anything in principle.
@@ -329,6 +365,8 @@ class BaseGaapFluxPlugin(measBase.GenericPlugin):
                 continue
 
             convolved = result.psfMatchedExposure[bbox]
+            kernelAcf = self._computeACF(result.psfMatchingKernel)
+
             for sigma in self.config.sigmas:
                 baseName = self.ConfigClass._getGaapResultName(sF, sigma, self.name)
                 if targetSigma >= sigma:
@@ -339,13 +377,16 @@ class BaseGaapFluxPlugin(measBase.GenericPlugin):
                 aperShape = afwGeom.Quadrupole(aperSigma2, aperSigma2, 0.0)
                 fluxResult = measBase.SdssShapeAlgorithm.computeFixedMomentsFlux(convolved.getMaskedImage(),
                                                                                  aperShape, center)
-                fluxScaling = sigma**2/aperSigma2  # Eq. A16 of Kuijken et al. (2015)
+                # Calculate the scale factors by which to scale the fluxes and
+                # their standard errors.
+                fluxScaling = 0.5*sigma**2/aperSigma2  # Eq. A16 of Kuijken et al. (2015)
+                fluxErrScaling = self._getFluxErrScaling(kernelAcf, aperShape)  # Eq. A17 of the same.
 
-                # Copy result to record
-                instFluxKey = measRecord.schema.join(baseName, "instFlux")
-                instFluxErrKey = measRecord.schema.join(baseName, "instFluxErr")
-                measRecord.set(instFluxKey, fluxScaling*fluxResult.instFlux)
-                measRecord.set(instFluxErrKey, fluxScaling*fluxResult.instFluxErr)
+                # Scale the fluxResult an copy result to record
+                fluxResult.instFlux *= fluxScaling
+                fluxResult.instFluxErr *= fluxScaling*fluxErrScaling
+                fluxResultKey = FluxResultKey(measRecord.schema[baseName])
+                fluxResultKey.set(measRecord, fluxResult)
 
         # Raise GaapConvolutionError before exiting the plugin
         # if the collection of errors is not empty
