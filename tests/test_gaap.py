@@ -23,16 +23,17 @@
 import math
 import unittest
 import galsim
-import lsst.utils.tests
-import lsst.daf.base as dafBase
+import lsst.afw.display as afwDisplay
 import lsst.afw.detection as afwDetection
 import lsst.afw.geom as afwGeom
-import lsst.geom as geom
-import lsst.afw.table as afwTable
 import lsst.afw.image as afwImage
+import lsst.afw.table as afwTable
+import lsst.daf.base as dafBase
+import lsst.geom as geom
 import lsst.meas.base as measBase
-import lsst.afw.display as afwDisplay
+import lsst.meas.base.tests
 import lsst.meas.extensions.gaap
+import lsst.utils.tests
 
 
 try:
@@ -112,6 +113,7 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
 
         algConfig = measConfig.plugins[algName]
         algConfig.scalingFactors = scalingFactors
+        algConfig.scaleByFwhm = False
 
         if forced:
             offset = geom.Extent2D(-12.3, 45.6)
@@ -171,15 +173,23 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
             self.assertTrue((source.get(baseName + "_instFlux") >= 0))
             self.assertTrue((source.get(baseName + "_instFluxErr") >= 0))
 
-    def runGaap(self, forced, scalingFactors=(1.0, 1.1, 1.15, 1.2, 1.5, 2.0), psfSigmas=(1.7, 0.95, 1.3,)):
-        for psfSigma in psfSigmas:
-            self.check(psfSigma=psfSigma, forced=forced, scalingFactors=scalingFactors)
+    def runGaap(self, forced, psfSigma, scalingFactors=(1.0, 1.1, 1.15, 1.2, 1.5, 2.0)):
+        self.check(psfSigma=psfSigma, forced=forced, scalingFactors=scalingFactors)
 
-    def testGaapUnforced(self):
-        self.runGaap(False)
+    @lsst.utils.tests.methodParameters(psfSigma=(1.7, 0.95, 1.3,))
+    def testGaapPluginUnforced(self, psfSigma):
+        """Run GAaP as Single-frame measurement plugin.
+        """
+        self.runGaap(False, psfSigma)
 
-    def testGaapForced(self):
-        self.runGaap(True)
+    @lsst.utils.tests.methodParameters(psfSigma=(1.7, 0.95, 1.3,))
+    def testGaapPluginForced(self, psfSigma):
+        """Run GAaP as forced measurement plugin.
+        """
+        self.runGaap(True, psfSigma)
+
+
+
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
