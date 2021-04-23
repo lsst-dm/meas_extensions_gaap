@@ -22,7 +22,8 @@
 
 from __future__ import annotations
 
-__all__ = ("GaapFluxPlugin", "GaapFluxConfig", "ForcedGaapFluxPlugin", "ForcedGaapFluxConfig")
+__all__ = ("GaapFluxPlugin", "GaapFluxConfig", "ForcedGaapFluxPlugin", "ForcedGaapFluxConfig",
+           "GaapFluxTransform", "ForcedGaapFluxTransform")
 
 from typing import Optional, Generator
 import itertools
@@ -30,6 +31,7 @@ import lsst.afw.image as afwImage
 import lsst.afw.detection as afwDetection
 import lsst.afw.geom as afwGeom
 import lsst.meas.base as measBase
+from lsst.meas.base.fluxUtilities import FluxResultKey, MagResultKey
 import lsst.pex.config as pexConfig
 from lsst.ip.diffim import ModelPsfMatchTask
 from lsst.pex.exceptions import RuntimeError as pexRuntimeError
@@ -243,6 +245,11 @@ class BaseGaapFluxPlugin(measBase.GenericPlugin):
         # Docstring inherited.
         return cls.FLUX_ORDER
 
+    @classmethod
+    def getTransformClass(cls):
+        # Docstring inherited.
+        return BaseGaapFluxTransform
+
     def convolve(self, exposure: afwImage.Exposure, modelPsf: afwDetection.GaussianPsf,
                  measRecord: lsst.afw.table.SourceRecord) -> afwImage.Exposure:  # noqa: F821
         """Convolve the ``exposure`` to make the PSF same as ``modelPsf``.
@@ -348,12 +355,33 @@ class BaseGaapFluxPlugin(measBase.GenericPlugin):
             raise GaapConvolutionError(errorCollection)
 
 
+class BaseGaapFluxTransform(measBase.MeasurementTransform):
+    def __init__(self, config, name, mapper):
+        super().__init__(config, name, mapper)
+        self.mapper = mapper
+        for baseName in config.getAllGaapResultNames(name):
+            self.magKey = MagResultKey.addFields(mapper.editOutputSchema(), baseName)
+        for key, field in mapper.getInputSchema().extract(name+"*_flag*").values():
+            mapper.addMapping(key)
+
+    def __call__(self, inputCatalog, outputCatalog, wcs, photoCalib):
+        self._checkCatalogSize(inputCatalog, outputCatalog)
+        for baseName in self.config.getAllGaapResultNames(self.name):
+            fluxResultKey = FluxResultKey(inputCatalog.schema[baseName])
+            for inSrc, outSrc in zip(inputCatalog, outputCatalog):
+                fluxResult = fluxResultKey.get(inSrc)
+                self.magKey.set(outSrc, photoCalib.instFluxToMagnitude(fluxResult.instFlux,
+                                                                       fluxResult.instFluxErr))
+
+
 GaapFluxConfig = BaseGaapFluxConfig
 GaapFluxPlugin = BaseGaapFluxPlugin.makeSingleFramePlugin(PLUGIN_NAME)
+GaapFluxTransform = BaseGaapFluxTransform
 """Single-frame version of `GaapFluxPlugin`.
 """
 
 ForcedGaapFluxConfig = BaseGaapFluxConfig
 ForcedGaapFluxPlugin = BaseGaapFluxPlugin.makeForcedPlugin(PLUGIN_NAME)
+ForcedGaapFluxTransform = BaseGaapFluxTransform
 """Forced version of `GaapFluxPlugin`.
 """

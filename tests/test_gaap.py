@@ -31,6 +31,7 @@ import lsst.geom as geom
 import lsst.afw.table as afwTable
 import lsst.afw.image as afwImage
 import lsst.meas.base as measBase
+import lsst.meas.base.tests
 import lsst.afw.display as afwDisplay
 import lsst.meas.extensions.gaap
 
@@ -180,6 +181,32 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
 
     def testGaapForced(self):
         self.runGaap(True)
+
+
+class GaapFluxTransformTestCase(lsst.meas.base.tests.FluxTransformTestCase,
+                                lsst.meas.base.tests.SingleFramePluginTransformSetupHelper,
+                                lsst.utils.tests.TestCase):
+
+    class GaapFluxAlgorithmFactory:
+        """Supply an empty ``PropertyList`` to `CircularApertureFluxAlgorithm`.
+
+        This is a helper class to make testing more convenient.
+        """
+
+        def __call__(self, control, name, inputSchema):
+            return lsst.meas.extensions.gaap.GaapFluxPlugin(control, name, inputSchema,
+                                                            lsst.daf.base.PropertyList())._generic
+
+    controlClass = lsst.meas.extensions.gaap.GaapFluxConfig
+    algorithmClass = GaapFluxAlgorithmFactory()
+    transformClass = lsst.meas.extensions.gaap.GaapFluxTransform
+    singleFramePlugins = ('ext_gaap_GaapFlux',)
+    forcedPlugins = ('ext_gaap_GaapFlux',)
+
+    def testTransform(self):
+        lsst.meas.base.tests.FluxTransformTestCase.testTransform(self,
+                                                                 self.control.getAllGaapResultNames(self.name)
+                                                                 )
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
