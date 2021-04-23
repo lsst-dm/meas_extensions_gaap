@@ -15,4 +15,4 @@ python/lsst/meas/extensions/gaap/version.py
 .cache
 .pytest_cache
 .coverage
-
+htmlcov/*
