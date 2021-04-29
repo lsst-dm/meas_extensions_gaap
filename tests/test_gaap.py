@@ -268,6 +268,58 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
         self.assertTrue(record[algName + "_flag_edge"])
         self.assertFalse(record[algName + "_flag"])
 
+    @lsst.utils.tests.methodParameters(noise=(0.001, 0.01, 0.1))
+    def testMonteCarlo(self, noise, recordId=1, sigmas=[3.0, 4.0], scalingFactors=[1.1, 1.15, 1.2, 1.3, 1.4]):
+        """Test GAaP flux uncertainties.
+
+        This test should demonstate that the estimated flux uncertainties agree
+        with those from Monte Carlo simulations.
+
+        Parameters
+        ----------
+        noise : `float`
+            The RMS value of the Gaussian noise field divided by the total flux
+            of the source.
+        recordId : `int`, optional
+            The source Id in the test dataset to measure.
+        sigmas : `List` [`float`], optional
+            The list of sigmas (in pixels) to construct the `GaapFluxConfig`.
+        scalingFactors : `List` [`float`], optional
+            The list of scaling factors to construct the `GaapFluxConfig`.
+        """
+        gaapConfig = lsst.meas.extensions.gaap.GaapFluxConfig(sigmas=sigmas, scalingFactors=scalingFactors)
+        gaapConfig.scaleByFwhm = True
+
+        algorithm, schema = self.makeAlgorithm(gaapConfig)
+        # Make a noiseless exposure and measurements for reference
+        exposure, catalog = self.dataset.realize(0.0, schema)
+        record0 = catalog[recordId]
+        totalFlux = record0["truth_instFlux"]
+        algorithm.measure(record0, exposure)
+
+        nSamples = 1024
+        catalog = afwTable.SourceCatalog(schema)
+        for repeat in range(nSamples):
+            exposure, cat = self.dataset.realize(noise*totalFlux, schema, randomSeed=repeat)
+            record = cat[recordId]
+            algorithm.measure(record, exposure)
+            catalog.append(record)
+
+        catalog = catalog.copy(deep=True)
+        for baseName in gaapConfig.getAllGaapResultNames(name="ext_gaap_GaapFlux"):
+            instFluxKey = schema.join(baseName, "instFlux")
+            instFluxErrKey = schema.join(baseName, "instFluxErr")
+            instFluxMean = catalog[instFluxKey].mean()
+            instFluxErrMean = catalog[instFluxErrKey].mean()
+            instFluxStdDev = catalog[instFluxKey].std()
+
+            # GAaP fluxes are not meant to be total fluxes.
+            # We compare the mean of the noisy measurements to its
+            # corresponding noiseless measurement instead of the true value
+            instFlux = record0[instFluxKey]
+            self.assertFloatsAlmostEqual(instFluxErrMean, instFluxStdDev, rtol=0.02)
+            self.assertLess(abs(instFluxMean - instFlux), 2.0*instFluxErrMean/nSamples**0.5)
+
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
     pass
