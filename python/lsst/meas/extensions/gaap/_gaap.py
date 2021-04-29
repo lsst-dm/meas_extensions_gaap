@@ -312,8 +312,8 @@ class BaseGaapFluxPlugin(measBase.GenericPlugin):
         # side, which is region of interest. The PSF matching sets NO_DATA mask
         # bit in the outermost k pixels. To account for these nans in the
         # edges, the subExposure needs to be expanded by another k pixels.
-        # So grow the bounding box initially by k pixels on either side.
-        pixToGrow = self.config.modelPsfMatch.kernel.active.kernelSize//2
+        # So grow the bounding box initially by 2k pixels on either side.
+        pixToGrow = self.config.modelPsfMatch.kernel.active.kernelSize-1
         bbox.grow(pixToGrow)
 
         # The bounding box may become too big and go out of bounds for sources
@@ -373,6 +373,7 @@ class BaseGaapFluxPlugin(measBase.GenericPlugin):
                 if targetSigma >= sigma:
                     flagKey = measRecord.schema.join(baseName, "flag_bigpsf")
                     measRecord.set(flagKey, 1)
+                    continue
 
                 aperSigma2 = sigma**2 - targetSigma**2
                 aperShape = afwGeom.Quadrupole(aperSigma2, aperSigma2, 0.0)
