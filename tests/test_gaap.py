@@ -201,6 +201,11 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
             self.assertTrue((source.get(baseName + "_instFlux") >= 0))
             self.assertTrue((source.get(baseName + "_instFluxErr") >= 0))
 
+        # For sF > 1, check that the measured value is close to the true value
+        for baseName in algConfig.getAllGaapResultNames(algName):
+            if "_1_0x_" not in baseName:
+                self.assertFloatsAlmostEqual(source.get(baseName + "_instFlux"), flux, rtol=0.1)
+
     def runGaap(self, forced, psfSigma, scalingFactors=(1.0, 1.05, 1.1, 1.15, 1.2, 1.5, 2.0)):
         self.check(psfSigma=psfSigma, forced=forced, scalingFactors=scalingFactors)
 
