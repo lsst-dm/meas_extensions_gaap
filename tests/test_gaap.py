@@ -221,15 +221,52 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
         """
         self.runGaap(True, psfSigma)
 
-    def runGaap(self, forced, scalingFactors=(1.0, 1.1, 1.15, 1.2, 1.5, 2.0), psfSigmas=(1.7, 0.95, 1.3,)):
-        for psfSigma in psfSigmas:
-            self.check(psfSigma=psfSigma, forced=forced, scalingFactors=scalingFactors)
+    def testFlags(self, sigmas=[2.5, 3.0, 4.0], scalingFactors=[1.15, 1.25, 1.4]):
+        """Test that GAaP flags are set properly.
 
-    def testGaapUnforced(self):
-        self.runGaap(False)
+        Specifically, we test that
 
-    def testGaapForced(self):
-        self.runGaap(True)
+        1. for invalid combinations of config parameters, only the
+        appropriate flags are set and that the measurement itself is not
+        flagged.
+        2. for sources close to the edge, the edge flags are set.
+
+        Parameters
+        ----------
+        sigmas : `List` [`float`], optional
+            The list of sigmas (in pixels) to construct the `GaapFluxConfig`.
+        scalingFactors : `List` [`float`], optional
+            The list of scaling factors to construct the `GaapFluxConfig`.
+        """
+        gaapConfig = lsst.meas.extensions.gaap.GaapFluxConfig(sigmas=sigmas, scalingFactors=scalingFactors)
+        gaapConfig.scaleByFwhm = True
+
+        algName = "ext_gaap_GaapFlux"
+        algorithm, schema = self.makeAlgorithm(gaapConfig)
+        # Make a noiseless exposure and measurements for reference
+        exposure, catalog = self.dataset.realize(0.0, schema)
+        record = catalog[0]
+        algorithm.measure(record, exposure)
+        seeing = exposure.getPsf().getSigma()
+        # Ensure that there is at least one combination of parameters that fail
+        self.assertLessEqual(min(gaapConfig.sigmas), seeing*max(gaapConfig.scalingFactors))
+        # Ensure that the measurement didn't completely fail
+        self.assertFalse(record[algName + "_flag"])
+        self.assertFalse(record[algName + "_flag_edge"])
+
+        for sF, sigma in itertools.product(gaapConfig.scalingFactors, gaapConfig.sigmas):
+            targetSigma = sF*seeing
+            baseName = gaapConfig._getGaapResultName(sF, sigma, algName)
+            if targetSigma >= sigma:
+                self.assertTrue(record[baseName+"_flag_bigpsf"])
+            else:
+                self.assertFalse(record[baseName+"_flag_bigpsf"])
+
+        # Ensure that the edge flag is set for the source at the corner.
+        record = catalog[2]
+        algorithm.measure(record, exposure)
+        self.assertTrue(record[algName + "_flag_edge"])
+        self.assertFalse(record[algName + "_flag"])
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
