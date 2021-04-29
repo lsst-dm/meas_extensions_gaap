@@ -22,6 +22,7 @@
 
 import math
 import unittest
+import itertools
 import galsim
 import lsst.afw.display as afwDisplay
 import lsst.afw.detection as afwDetection
@@ -93,6 +94,33 @@ def makeGalaxyExposure(scale, psfSigma=0.9, flux=1000., galSigma=3.7, variance=1
 class GaapFluxTestCase(lsst.utils.tests.TestCase):
     """Main test case for the GAaP plugin.
     """
+    def setUp(self):
+        self.center = lsst.geom.Point2D(100.0, 770.0)
+        self.bbox = lsst.geom.Box2I(lsst.geom.Point2I(-20, -30),
+                                    lsst.geom.Extent2I(240, 1600))
+        self.dataset = lsst.meas.base.tests.TestDataset(self.bbox)
+
+        # We will consider three sources in our test case
+        # recordId = 0: A bright point source
+        # recordId = 1: An elliptical (Gaussian) galaxy
+        # recordId = 2: A source near a corner
+        self.dataset.addSource(1000., self.center - lsst.geom.Extent2I(0, 100))
+        self.dataset.addSource(1000., self.center + lsst.geom.Extent2I(0, 100),
+                               afwGeom.Quadrupole(9., 9., 4.))
+        self.dataset.addSource(600., lsst.geom.Point2D(self.bbox.getMin()) + lsst.geom.Extent2I(10, 10))
+
+    def tearDown(self):
+        del self.center
+        del self.bbox
+        del self.dataset
+
+    def makeAlgorithm(self, gaapConfig=None):
+        schema = lsst.meas.base.tests.TestDataset.makeMinimalSchema()
+        if gaapConfig is None:
+            gaapConfig = lsst.meas.extensions.gaap.GaapFluxConfig()
+        gaapPlugin = lsst.meas.extensions.gaap.GaapFluxPlugin(gaapConfig, 'ext_gaap_GaapFlux', schema, None)
+        return gaapPlugin, schema
+
     def check(self, psfSigma=0.5, flux=1000., scalingFactors=[1.15], forced=False):
         """Check for non-negative values for GAaP instFlux and instFluxErr.
         """
