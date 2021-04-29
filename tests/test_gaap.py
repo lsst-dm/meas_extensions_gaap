@@ -43,7 +43,7 @@ except NameError:
     frame = 1
 
 
-def makeGalaxyExposure(scale, psfSigma=0.9, flux=1000., galSigma=3.7):
+def makeGalaxyExposure(scale, psfSigma=0.9, flux=1000., galSigma=3.7, variance=1.0):
     """Make an ideal exposure of circular Gaussian
 
     For the purpose of testing Gaussian Aperture and PSF algorithm (GAaP), this
@@ -79,7 +79,7 @@ def makeGalaxyExposure(scale, psfSigma=0.9, flux=1000., galSigma=3.7):
     exposure = afwImage.makeExposure(afwImage.makeMaskedImageFromArrays(galIm.array))
     exposure.setPsf(afwDetection.GaussianPsf(psfWidth, psfWidth, psfSigma))
 
-    exposure.variance.set(1.0)
+    exposure.variance.set(variance)
     exposure.mask.set(0)
     center = exposure.getBBox().getCenter()
 
@@ -101,7 +101,7 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
         TaskClass = measBase.ForcedMeasurementTask if forced else measBase.SingleFrameMeasurementTask
 
         # Create an image of a tiny source
-        exposure, center = makeGalaxyExposure(scale, psfSigma, flux, galSigma=0.001)
+        exposure, center = makeGalaxyExposure(scale, psfSigma, flux, galSigma=0.001, variance=0.)
 
         measConfig = TaskClass.ConfigClass()
         algName = "ext_gaap_GaapFlux"
@@ -113,6 +113,7 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
 
         algConfig = measConfig.plugins[algName]
         algConfig.scalingFactors = scalingFactors
+        algConfig.scaleByFwhm = True
 
         if forced:
             offset = geom.Extent2D(-12.3, 45.6)
@@ -153,7 +154,7 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
         measCat = afwTable.SourceCatalog(schema)
         source = measCat.addNew()
         source.getTable().setMetadata(algMetadata)
-        ss = afwDetection.FootprintSet(exposure.getMaskedImage(), afwDetection.Threshold(0.1))
+        ss = afwDetection.FootprintSet(exposure.getMaskedImage(), afwDetection.Threshold(10.0))
         fp = ss.getFootprints()[0]
         source.setFootprint(fp)
 
@@ -168,11 +169,24 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
 
         # We will check the accuracy of the measured flux in DM-29430.
         # We simply check now if it produces a positive number (non-nan)
-        for sF in algConfig.scalingFactors:
-            for sigma in algConfig.sigmas:
-                baseName = algConfig.getGaapResultName(sF, sigma, algName)
-                self.assertTrue((source.get(baseName + "_instFlux") >= 0))
-                self.assertTrue((source.get(baseName + "_instFluxErr") >= 0))
+        for baseName in algConfig.getAllGaapResultNames(algName):
+            self.assertTrue((source.get(baseName + "_instFlux") >= 0))
+            self.assertTrue((source.get(baseName + "_instFluxErr") >= 0))
+
+    def runGaap(self, forced, psfSigma, scalingFactors=(1.0, 1.05, 1.1, 1.15, 1.2, 1.5, 2.0)):
+        self.check(psfSigma=psfSigma, forced=forced, scalingFactors=scalingFactors)
+
+    @lsst.utils.tests.methodParameters(psfSigma=(1.7, 0.95, 1.3,))
+    def testGaapPluginUnforced(self, psfSigma):
+        """Run GAaP as Single-frame measurement plugin.
+        """
+        self.runGaap(False, psfSigma)
+
+    @lsst.utils.tests.methodParameters(psfSigma=(1.7, 0.95, 1.3,))
+    def testGaapPluginForced(self, psfSigma):
+        """Run GAaP as forced measurement plugin.
+        """
+        self.runGaap(True, psfSigma)
 
     def runGaap(self, forced, scalingFactors=(1.0, 1.1, 1.15, 1.2, 1.5, 2.0), psfSigmas=(1.7, 0.95, 1.3,)):
         for psfSigma in psfSigmas:
