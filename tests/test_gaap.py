@@ -23,16 +23,17 @@
 import math
 import unittest
 import galsim
-import lsst.utils.tests
-import lsst.daf.base as dafBase
+import lsst.afw.display as afwDisplay
 import lsst.afw.detection as afwDetection
 import lsst.afw.geom as afwGeom
-import lsst.geom as geom
-import lsst.afw.table as afwTable
 import lsst.afw.image as afwImage
+import lsst.afw.table as afwTable
+import lsst.daf.base as dafBase
+import lsst.geom as geom
 import lsst.meas.base as measBase
-import lsst.afw.display as afwDisplay
+import lsst.meas.base.tests
 import lsst.meas.extensions.gaap
+import lsst.utils.tests
 
 
 try:
