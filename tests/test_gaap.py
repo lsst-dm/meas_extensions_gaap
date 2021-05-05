@@ -262,7 +262,7 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
                                                 targetSigma)
             result = algorithm._generic._convolve(exposure, modelPsf, record)
             kernel = result.psfMatchingKernel
-            kernelAcf = algorithm._generic._computeACF(kernel)
+            kernelAcf = algorithm._generic._computeKernelAcf(kernel)
             for sigma in gaapConfig.sigmas:
                 aperSigma2 = sigma**2 - targetSigma**2
                 aperShape = afwGeom.Quadrupole(aperSigma2, aperSigma2, 0.0)
