@@ -211,15 +211,20 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
 
     def getFluxErrScaling(self, kernel, aperShape):
         """Returns the value by which the standard error has to be scaled due
-           to noise correlations.
+        to noise correlations.
 
-           This is an alternative implementation to the `_getFluxErrScaling`
-           method of `BaseGaapFluxPlugin`, but is less effective.
+        This is an alternative implementation to the `_getFluxErrScaling`
+        method of `BaseGaapFluxPlugin`, but is less efficient.
 
-           Parameters
-           ----------
-           `kernel` : `lsst.afw.math.Kernel`
+        Parameters
+        ----------
+        `kernel` : `lsst.afw.math.Kernel`
+            The PSF-Gaussianization kernel.
 
+        Returns
+        -------
+        fluxErrScaling : `float`
+            The factor by which the standard error on GAaP flux must be scaled.
         """
         kim = afwImage.ImageD(kernel.getDimensions())
         kernel.computeImage(kim, False)
