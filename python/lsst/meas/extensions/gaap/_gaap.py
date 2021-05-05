@@ -123,8 +123,8 @@ class BaseGaapFluxConfig(measBase.BaseMeasurementPluginConfig):
         self.modelPsfMatch.validate()
         assert self.modelPsfMatch.kernel.active.alardNGauss == 1
 
-    @classmethod
-    def _getGaapResultName(cls, sF: float, sigma: float, name: Optional[str] = None) -> str:
+    @staticmethod
+    def _getGaapResultName(sF: float, sigma: float, name: Optional[str] = None) -> str:
         """Return the base name for GAaP fields
 
         For example, for a scaling factor of 1.15 for seeing and sigma of the
@@ -133,8 +133,8 @@ class BaseGaapFluxConfig(measBase.BaseMeasurementPluginConfig):
 
         Notes
         -----
-        Being a class method, this does not check if measurements corresponding
-        to the input arguments are made. Users should use
+        Being a static method, this does not check if measurements correspond
+        to the input arguments. Instead, users should use
         `getAllGaapResultNames` to obtain the full list of base names.
 
         This is not a config-y thing, but is placed here to make the fieldnames
