@@ -266,16 +266,25 @@ class BaseGaapFluxPlugin(measBase.GenericPlugin):
         return acfImage
 
     @staticmethod
-    def _getFluxErrScaling(kernelACF: lsst.afw.image.Image,  # noqa: F821
+    def _getFluxErrScaling(kernelAcf: lsst.afw.image.Image,  # noqa: F821
                            aperShape: lsst.afw.geom.Quadrupole) -> float:  # noqa: F821
-        """Returns the value by which the standard error has to be scaled due
-           to noise correlations.
+        """Calculate the value by which the standard error has to be scaled due
+        to noise correlations.
+
+        This calculates the correction to apply to the naively computed
+        `instFluxErr` to account for correlations in the pixel noise introduced
+        in the PSF-Gaussianization step.
+        This method performs the integral in Eq. A17 of Kuijken et al. (2015).
+
+        The returned value equals
+        .. math:: \int\mathrm{d}x C^G(x) \exp(-x^T Q^{-1}x/4)
+        where :math: `Q` is ``aperShape`` and :math: `C^G(x)` is ``kernelAcf``.
 
         Parameters
         ----------
-        kernelACF : `lsst.afw.image.Image`
+        kernelAcf : `~lsst.afw.image.Image`
             The auto-correlation function (ACF) of the PSF matching kernel.
-        aperShape : `lsst.afw.geom.Quadrupole`
+        aperShape : `~lsst.afw.geom.Quadrupole`
             The shape parameter of the Gaussian function which was used to
             measure GAaP flux.
 
@@ -285,8 +294,8 @@ class BaseGaapFluxPlugin(measBase.GenericPlugin):
             The factor by which the standard error on GAaP flux must be scaled.
         """
         aperShape2 = afwGeom.Quadrupole(2*aperShape.getParameterVector())
-        corrFlux = measBase.SdssShapeAlgorithm.computeFixedMomentsFlux(kernelACF, aperShape2,
-                                                                       kernelACF.getBBox().getCenter())
+        corrFlux = measBase.SdssShapeAlgorithm.computeFixedMomentsFlux(kernelAcf, aperShape2,
+                                                                       kernelAcf.getBBox().getCenter())
         fluxErrScaling = (0.5*corrFlux.instFlux)**0.5
         return fluxErrScaling
 
@@ -388,10 +397,16 @@ class BaseGaapFluxPlugin(measBase.GenericPlugin):
                 aperShape = afwGeom.Quadrupole(aperSigma2, aperSigma2, 0.0)
                 fluxResult = measBase.SdssShapeAlgorithm.computeFixedMomentsFlux(convolved.getMaskedImage(),
                                                                                  aperShape, center)
-                # Calculate the scale factors by which to scale the fluxes and
-                # their standard errors.
-                fluxScaling = 0.5*sigma**2/aperSigma2  # Eq. A16 of Kuijken et al. (2015)
-                fluxErrScaling = self._getFluxErrScaling(kernelAcf, aperShape)  # Eq. A17 of the same.
+                # Calculate the pre-factor in Eq. A16 of Kuijken et al. (2015)
+                # to scale the flux. Include an extra factor of 0.5 to undo
+                # the normalization factor of 2 in `computeFixedMomentsFlux`.
+                fluxScaling = 0.5*sigma**2/aperSigma2
+
+                # Calculate the integral in Eq. A17 of Kuijken et al. (2015)
+                # ``fluxErrScaling`` contains the factors not captured by
+                # ``fluxScaling`` and `instFluxErr`. It is 1 theoretically
+                # if ``kernelAcf`` is a Dirac-delta function.
+                fluxErrScaling = self._getFluxErrScaling(kernelAcf, aperShape)
 
                 # Scale the fluxResult and copy result to record
                 fluxResult.instFlux *= fluxScaling
