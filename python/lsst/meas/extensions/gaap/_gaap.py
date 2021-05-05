@@ -252,8 +252,9 @@ class BaseGaapFluxPlugin(measBase.GenericPlugin):
         acfImage = afwImage.ImageD(acfArray)
         return acfImage
 
-    def _getFluxErrScaling(self, kernelACF: lsst.afw.image.Image,
-                           aperShape: lsst.afw.geom.Quadrupole) -> float:
+    @staticmethod
+    def _getFluxErrScaling(kernelACF: lsst.afw.image.Image,  # noqa: F821
+                           aperShape: lsst.afw.geom.Quadrupole) -> float:  # noqa: F821
         """Returns the value by which the standard error has to be scaled due
            to noise correlations.
 
