@@ -393,7 +393,7 @@ class BaseGaapFluxPlugin(measBase.GenericPlugin):
                 fluxScaling = 0.5*sigma**2/aperSigma2  # Eq. A16 of Kuijken et al. (2015)
                 fluxErrScaling = self._getFluxErrScaling(kernelAcf, aperShape)  # Eq. A17 of the same.
 
-                # Scale the fluxResult an copy result to record
+                # Scale the fluxResult and copy result to record
                 fluxResult.instFlux *= fluxScaling
                 fluxResult.instFluxErr *= fluxScaling*fluxErrScaling
                 fluxResultKey = FluxResultKey(measRecord.schema[baseName])
