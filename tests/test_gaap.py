@@ -218,7 +218,7 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
 
         Parameters
         ----------
-        `kernel` : `lsst.afw.math.Kernel`
+        `kernel` : `~lsst.afw.math.Kernel`
             The PSF-Gaussianization kernel.
 
         Returns
@@ -245,6 +245,13 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
         see Eqs. A11 & A17 of Kuijken et al. (2015). This test ensures that the
         calculation of the scaling factors matches the analytical expression
         when the PSF-matching kernel is a Gaussian.
+
+        Parameters
+        ----------
+        sigmas : `list` [`float`], optional
+            A list of effective Gaussian aperture sizes.
+        scalingFactors : `list` [`float`], optional
+            A list of factors by which the PSF size must be scaled.
         """
         # Create an image of an extended source
         gaapConfig = lsst.meas.extensions.gaap.GaapFluxConfig(sigmas=sigmas, scalingFactors=scalingFactors)
