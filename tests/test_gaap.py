@@ -23,16 +23,19 @@
 import math
 import unittest
 import galsim
-import lsst.utils.tests
-import lsst.daf.base as dafBase
+import lsst.afw.display as afwDisplay
 import lsst.afw.detection as afwDetection
 import lsst.afw.geom as afwGeom
-import lsst.geom as geom
-import lsst.afw.table as afwTable
 import lsst.afw.image as afwImage
+import lsst.afw.table as afwTable
+import lsst.daf.base as dafBase
+import lsst.geom as geom
 import lsst.meas.base as measBase
-import lsst.afw.display as afwDisplay
+import lsst.meas.base.tests
 import lsst.meas.extensions.gaap
+import lsst.utils.tests
+import numpy as np
+import scipy
 
 
 try:
@@ -92,6 +95,25 @@ def makeGalaxyExposure(scale, psfSigma=0.9, flux=1000., galSigma=3.7):
 class GaapFluxTestCase(lsst.utils.tests.TestCase):
     """Main test case for the GAaP plugin.
     """
+    def setUp(self):
+        self.center = lsst.geom.Point2D(100.0, 770.0)
+        self.bbox = lsst.geom.Box2I(lsst.geom.Point2I(-20, -30),
+                                    lsst.geom.Extent2I(240, 1600))
+        self.dataset = lsst.meas.base.tests.TestDataset(self.bbox)
+        self.dataset.addSource(1000., self.center)
+
+    def tearDown(self):
+        del self.center
+        del self.bbox
+        del self.dataset
+
+    def makeAlgorithm(self, gaapConfig=None):
+        schema = lsst.meas.base.tests.TestDataset.makeMinimalSchema()
+        if gaapConfig is None:
+            gaapConfig = lsst.meas.extensions.gaap.GaapFluxConfig()
+        gaapPlugin = lsst.meas.extensions.gaap.GaapFluxPlugin(gaapConfig, 'ext_gaap_GaapFlux', schema, None)
+        return gaapPlugin, schema
+
     def check(self, psfSigma=0.5, flux=1000., scalingFactors=[1.15], forced=False):
         """Check for non-negative values for GAaP instFlux and instFluxErr.
         """
@@ -112,6 +134,7 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
 
         algConfig = measConfig.plugins[algName]
         algConfig.scalingFactors = scalingFactors
+        algConfig.scaleByFwhm = False
 
         if forced:
             offset = geom.Extent2D(-12.3, 45.6)
@@ -167,21 +190,99 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
 
         # We will check the accuracy of the measured flux in DM-29430.
         # We simply check now if it produces a positive number (non-nan)
-        for sF in algConfig.scalingFactors:
-            for sigma in algConfig.sigmas:
-                baseName = algConfig.getGaapResultName(sF, sigma, algName)
-                self.assertTrue((source.get(baseName + "_instFlux") >= 0))
-                self.assertTrue((source.get(baseName + "_instFluxErr") >= 0))
+        for baseName in algConfig.getAllGaapResultNames(algName):
+            self.assertTrue((source.get(baseName + "_instFlux") >= 0))
+            self.assertTrue((source.get(baseName + "_instFluxErr") >= 0))
 
-    def runGaap(self, forced, scalingFactors=(1.0, 1.1, 1.15, 1.2, 1.5, 2.0), psfSigmas=(1.7, 0.95, 1.3,)):
-        for psfSigma in psfSigmas:
-            self.check(psfSigma=psfSigma, forced=forced, scalingFactors=scalingFactors)
+    def runGaap(self, forced, psfSigma, scalingFactors=(1.0, 1.1, 1.15, 1.2, 1.5, 2.0)):
+        self.check(psfSigma=psfSigma, forced=forced, scalingFactors=scalingFactors)
 
-    def testGaapUnforced(self):
-        self.runGaap(False)
+    @lsst.utils.tests.methodParameters(psfSigma=(1.7, 0.95, 1.3,))
+    def testGaapPluginUnforced(self, psfSigma):
+        """Run GAaP as Single-frame measurement plugin.
+        """
+        self.runGaap(False, psfSigma)
 
-    def testGaapForced(self):
-        self.runGaap(True)
+    @lsst.utils.tests.methodParameters(psfSigma=(1.7, 0.95, 1.3,))
+    def testGaapPluginForced(self, psfSigma):
+        """Run GAaP as forced measurement plugin.
+        """
+        self.runGaap(True, psfSigma)
+
+    def getFluxErrScaling(self, kernel, aperShape):
+        """Returns the value by which the standard error has to be scaled due
+        to noise correlations.
+
+        This is an alternative implementation to the `_getFluxErrScaling`
+        method of `BaseGaapFluxPlugin`, but is less efficient.
+
+        Parameters
+        ----------
+        `kernel` : `~lsst.afw.math.Kernel`
+            The PSF-Gaussianization kernel.
+
+        Returns
+        -------
+        fluxErrScaling : `float`
+            The factor by which the standard error on GAaP flux must be scaled.
+        """
+        kim = afwImage.ImageD(kernel.getDimensions())
+        kernel.computeImage(kim, False)
+        weight = galsim.Image(np.zeros_like(kim.array))
+        aperSigma = aperShape.getDeterminantRadius()
+        gauss = galsim.Gaussian(sigma=aperSigma, flux=2*np.pi*aperSigma**2)
+        weight = gauss.drawImage(image=weight, scale=1.0, method='no_pixel')
+        kwarr = scipy.signal.convolve2d(weight.array, kim.array, boundary='fill')
+        fluxErrScaling = np.sqrt(np.sum(kwarr*kwarr))
+        fluxErrScaling /= np.sqrt(np.pi*aperSigma**2)
+        return fluxErrScaling
+
+    def testCorrelatedNoiseError(self, sigmas=[3.0, 4.0], scalingFactors=[1.15, 1.2, 1.25, 1.3, 1.4]):
+        """Test the scaling to standard error due to correlated noise.
+
+        The uncertainty estimate on GAaP fluxes is scaled by an amount
+        determined by the auto-correlation function of the PSF-matching kernel;
+        see Eqs. A11 & A17 of Kuijken et al. (2015). This test ensures that the
+        calculation of the scaling factors matches the analytical expression
+        when the PSF-matching kernel is a Gaussian.
+
+        Parameters
+        ----------
+        sigmas : `list` [`float`], optional
+            A list of effective Gaussian aperture sizes.
+        scalingFactors : `list` [`float`], optional
+            A list of factors by which the PSF size must be scaled.
+        """
+        # Create an image of an extended source
+        gaapConfig = lsst.meas.extensions.gaap.GaapFluxConfig(sigmas=sigmas, scalingFactors=scalingFactors)
+        gaapConfig.scaleByFwhm = True
+
+        algorithm, schema = self.makeAlgorithm(gaapConfig)
+        exposure, catalog = self.dataset.realize(0.0, schema, randomSeed=123456789)
+        record = catalog[0]
+        center = self.center
+        seeing = exposure.getPsf().computeShape(center).getDeterminantRadius()
+        for sF in gaapConfig.scalingFactors:
+            targetSigma = sF*seeing
+            modelPsf = afwDetection.GaussianPsf(algorithm.config.modelPsfDimension,
+                                                algorithm.config.modelPsfDimension,
+                                                targetSigma)
+            result = algorithm._generic._convolve(exposure, modelPsf, record)
+            kernel = result.psfMatchingKernel
+            kernelAcf = algorithm._generic._computeKernelAcf(kernel)
+            for sigma in gaapConfig.sigmas:
+                aperSigma2 = sigma**2 - targetSigma**2
+                aperShape = afwGeom.Quadrupole(aperSigma2, aperSigma2, 0.0)
+                fluxErrScaling1 = algorithm._generic._getFluxErrScaling(kernelAcf, aperShape)
+                fluxErrScaling2 = self.getFluxErrScaling(kernel, aperShape)
+
+                # The PSF matching kernel is a Gaussian of sigma^2 = (f^2-1)s^2
+                # where f is the scalingFactor and s is the original seeing.
+                # The integral of ACF of the kernel times the elliptical
+                # Gaussian described by aperShape is given below.
+                analyticalValue = ((sigma**2 - (targetSigma)**2)/(sigma**2-seeing**2))**0.5
+                self.assertFloatsAlmostEqual(fluxErrScaling1, analyticalValue, rtol=1e-4)
+                self.assertFloatsAlmostEqual(fluxErrScaling1, fluxErrScaling2, rtol=1e-4)
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
