@@ -227,15 +227,15 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
         Specifically, we test that
 
         1. for invalid combinations of config parameters, only the
-        appropriate flags are set and that the measurement itself is not
+        appropriate flags are set and not that the entire measurement itself is
         flagged.
         2. for sources close to the edge, the edge flags are set.
 
         Parameters
         ----------
-        sigmas : `List` [`float`], optional
+        sigmas : `list` [`float`], optional
             The list of sigmas (in pixels) to construct the `GaapFluxConfig`.
-        scalingFactors : `List` [`float`], optional
+        scalingFactors : `list` [`float`], optional
             The list of scaling factors to construct the `GaapFluxConfig`.
         """
         gaapConfig = lsst.meas.extensions.gaap.GaapFluxConfig(sigmas=sigmas, scalingFactors=scalingFactors)
@@ -282,9 +282,9 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
             of the source.
         recordId : `int`, optional
             The source Id in the test dataset to measure.
-        sigmas : `List` [`float`], optional
+        sigmas : `list` [`float`], optional
             The list of sigmas (in pixels) to construct the `GaapFluxConfig`.
-        scalingFactors : `List` [`float`], optional
+        scalingFactors : `list` [`float`], optional
             The list of scaling factors to construct the `GaapFluxConfig`.
         """
         gaapConfig = lsst.meas.extensions.gaap.GaapFluxConfig(sigmas=sigmas, scalingFactors=scalingFactors)
