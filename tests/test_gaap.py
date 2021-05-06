@@ -34,6 +34,7 @@ import lsst.geom as geom
 import lsst.meas.base as measBase
 import lsst.meas.base.tests
 import lsst.meas.extensions.gaap
+from lsst.pex.exceptions.wrappers import InvalidParameterError
 import lsst.utils.tests
 
 
@@ -237,6 +238,18 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
             The list of sigmas (in pixels) to construct the `GaapFluxConfig`.
         scalingFactors : `list` [`float`], optional
             The list of scaling factors to construct the `GaapFluxConfig`.
+
+        Raises
+        -----
+        InvalidParameterError
+            Raised if none of the config parameters will fail a measurement.
+
+        Notes
+        -----
+        Since the seeing in the test dataset is 2 pixels, at least one of the
+        ``sigmas`` should be smaller than at least twice of one of the
+        ``scalingFactors`` to avoid the InvalidParameterError exception being
+        raised.
         """
         gaapConfig = lsst.meas.extensions.gaap.GaapFluxConfig(sigmas=sigmas, scalingFactors=scalingFactors)
         gaapConfig.scaleByFwhm = True
@@ -252,7 +265,10 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
         # Measurement must fail (i.e., flag_bigpsf must be set) if
         # sigma < scalingFactor * seeing
         # Ensure that there is at least one combination of parameters that fail
-        self.assertLessEqual(min(gaapConfig.sigmas), seeing*max(gaapConfig.scalingFactors))
+        if not(min(gaapConfig.sigmas) < seeing*max(gaapConfig.scalingFactors)):
+            raise InvalidParameterError("The config parameter do not trigger a measurement failure. "
+                                        "Consider including lower values in ``sigmas`` and/or larger values "
+                                        "for ``scalingFactors``")
         # Ensure that the measurement is not a complete failure
         self.assertFalse(record[algName + "_flag"])
         self.assertFalse(record[algName + "_flag_edge"])
