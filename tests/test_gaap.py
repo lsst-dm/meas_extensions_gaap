@@ -241,6 +241,7 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
         gaapConfig = lsst.meas.extensions.gaap.GaapFluxConfig(sigmas=sigmas, scalingFactors=scalingFactors)
         gaapConfig.scaleByFwhm = True
 
+        # Make an instance of GAaP algorithm from a config
         algName = "ext_gaap_GaapFlux"
         algorithm, schema = self.makeAlgorithm(gaapConfig)
         # Make a noiseless exposure and measurements for reference
@@ -248,12 +249,14 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
         record = catalog[0]
         algorithm.measure(record, exposure)
         seeing = exposure.getPsf().getSigma()
+        # Measurement must fail (i.e., flag_bigpsf must be set) if
+        # sigma < scalingFactor * seeing
         # Ensure that there is at least one combination of parameters that fail
         self.assertLessEqual(min(gaapConfig.sigmas), seeing*max(gaapConfig.scalingFactors))
-        # Ensure that the measurement didn't completely fail
+        # Ensure that the measurement is not a complete failure
         self.assertFalse(record[algName + "_flag"])
         self.assertFalse(record[algName + "_flag_edge"])
-
+        # Ensure that flag_bigpsf is set if sigma < scalingFactor * seeing
         for sF, sigma in itertools.product(gaapConfig.scalingFactors, gaapConfig.sigmas):
             targetSigma = sF*seeing
             baseName = gaapConfig._getGaapResultName(sF, sigma, algName)
@@ -291,7 +294,7 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
         gaapConfig.scaleByFwhm = True
 
         algorithm, schema = self.makeAlgorithm(gaapConfig)
-        # Make a noiseless exposure and measurements for reference
+        # Make a noiseless exposure and keep measurement record for reference
         exposure, catalog = self.dataset.realize(0.0, schema)
         recordNoiseless = catalog[recordId]
         totalFlux = recordNoiseless["truth_instFlux"]
