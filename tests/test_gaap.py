@@ -293,9 +293,9 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
         algorithm, schema = self.makeAlgorithm(gaapConfig)
         # Make a noiseless exposure and measurements for reference
         exposure, catalog = self.dataset.realize(0.0, schema)
-        record0 = catalog[recordId]
-        totalFlux = record0["truth_instFlux"]
-        algorithm.measure(record0, exposure)
+        recordNoiseless = catalog[recordId]
+        totalFlux = recordNoiseless["truth_instFlux"]
+        algorithm.measure(recordNoiseless, exposure)
 
         nSamples = 1024
         catalog = afwTable.SourceCatalog(schema)
@@ -316,7 +316,7 @@ class GaapFluxTestCase(lsst.utils.tests.TestCase):
             # GAaP fluxes are not meant to be total fluxes.
             # We compare the mean of the noisy measurements to its
             # corresponding noiseless measurement instead of the true value
-            instFlux = record0[instFluxKey]
+            instFlux = recordNoiseless[instFluxKey]
             self.assertFloatsAlmostEqual(instFluxErrMean, instFluxStdDev, rtol=0.02)
             self.assertLess(abs(instFluxMean - instFlux), 2.0*instFluxErrMean/nSamples**0.5)
 
