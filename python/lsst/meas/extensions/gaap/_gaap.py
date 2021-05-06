@@ -307,13 +307,13 @@ class BaseGaapFluxPlugin(measBase.GenericPlugin):
         footprint = measRecord.getFootprint()
         bbox = footprint.getBBox()
 
-        # The kernelSize is guaranteed to be odd, say 2k+1 pixels (default is
-        # 21). The flux inside the footprint is smeared by k pixels on either
-        # side, which is region of interest. The PSF matching sets NO_DATA mask
-        # bit in the outermost k pixels. To account for these nans in the
-        # edges, the subExposure needs to be expanded by another k pixels.
-        # So grow the bounding box initially by 2k pixels on either side.
-        pixToGrow = self.config.modelPsfMatch.kernel.active.kernelSize-1
+        # The kernelSize is guaranteed to be odd, say 2k+1 pixels (k=10 by
+        # default). The flux inside the footprint is smeared by k pixels on
+        # either side, which is region of interest. The PSF matching sets
+        # NO_DATA mask bit in the outermost k pixels. To account for these nans
+        # along the edges, the subExposure needs to be expanded by another
+        # k pixels. So grow the bounding box initially by 2k pixels on either
+        # side.
         pixToGrow = self.config.modelPsfMatch.kernel.active.kernelSize - 1
         bbox.grow(pixToGrow)
 
