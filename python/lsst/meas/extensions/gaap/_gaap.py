@@ -314,6 +314,7 @@ class BaseGaapFluxPlugin(measBase.GenericPlugin):
         # edges, the subExposure needs to be expanded by another k pixels.
         # So grow the bounding box initially by 2k pixels on either side.
         pixToGrow = self.config.modelPsfMatch.kernel.active.kernelSize-1
+        pixToGrow = self.config.modelPsfMatch.kernel.active.kernelSize - 1
         bbox.grow(pixToGrow)
 
         # The bounding box may become too big and go out of bounds for sources
